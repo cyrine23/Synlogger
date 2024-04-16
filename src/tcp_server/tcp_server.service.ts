@@ -5,19 +5,24 @@ import { promisify } from 'util';
 import { ThrottlerGuard } from '@nestjs/throttler';
 @Injectable()
 export class TcpServerService {
+  private readonly allowedIPs = ['127.0.0.1'];
   @UseGuards(ThrottlerGuard) //  ThrottlerGuard ensure that the method is rate-limited
   startServer(): void {
     const server = createServer((socket: Socket) => {
+      const clientAddress = socket.remoteAddress;
+      if (!this.isAllowedIP(clientAddress)) {
+        console.log(`Connection from unauthorized IP: ${clientAddress}`);
+        socket.end();
+        return;
+      }
       console.log('Client connected');
 
       socket.on('data', (data) => {
-        // console.log('Received data:', data.toString());
         if (data) {
           // Handle received data here
           let arrayData = data.toString().split('\n');
           let device_ID = arrayData[0];
           if (device_ID.slice(0, 9) == 'synlogger') {
-            console.log('deviceid', device_ID);
             for (let i = 1; i < arrayData.length - 1; i++) {
               let line = arrayData[i].split(',');
               if (line.length >= 2) {
@@ -49,6 +54,12 @@ export class TcpServerService {
       console.log(`TCP server listening on port ${port}`);
     });
   }
+
+  private isAllowedIP(ip: string): boolean {
+    // Check if the client IP is in the allowed list
+    return this.allowedIPs.includes(ip);
+  }
+
   async writeToFile(
     path: string,
     fileName: string,
